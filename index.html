@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Knight's Tour Infinito</title>
+  <style>
+    body { font-family: Arial; background: #111; color: #fff; margin: 0; padding: 2rem; }
+    button { margin-top: 1rem; padding: 0.5rem 1rem; font-size: 1rem; }
+    #log { white-space: pre-wrap; max-height: 50vh; overflow-y: auto; background: #222; padding: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Knight's Tour sin Límite</h1>
+  <button onclick="startSearch()">Iniciar Búsqueda</button>
+  <button onclick="stopSearch()">Detener</button>
+  <button onclick="exportSolutions()">Exportar JSON</button>
+  <div id="log"></div>
+
+  <script>
+    const N = 5; // Tamaño del tablero
+    let running = false;
+    let db;
+
+    const directions = [
+      [2, 1], [1, 2], [-1, 2], [-2, 1],
+      [-2, -1], [-1, -2], [1, -2], [2, -1]
+    ];
+
+    function createBoard() {
+      return Array.from({ length: N }, () => Array(N).fill(-1));
+    }
+
+    function isSafe(x, y, board) {
+      return x >= 0 && x < N && y >= 0 && y < N && board[x][y] === -1;
+    }
+
+    function getName(path) {
+      const key = `${path[0]}-${path[1]}-${path[path.length - 1]}`;
+      return key;
+    }
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open("KnightTourDB", 1);
+        request.onupgradeneeded = function (e) {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains("solutions")) {
+            db.createObjectStore("solutions", { keyPath: "id" });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject("Error abriendo IndexedDB");
+      });
+    }
+
+    async function saveSolution(path) {
+      const name = getName(path);
+      const id = name + "_" + Date.now();
+      const tx = db.transaction("solutions", "readwrite");
+      const store = tx.objectStore("solutions");
+
+      const cursorReq = store.openCursor();
+      return new Promise((resolve) => {
+        let duplicate = false;
+        cursorReq.onsuccess = function (e) {
+          const cursor = e.target.result;
+          if (cursor) {
+            if (getName(cursor.value.path) === name) {
+              duplicate = true;
+              resolve(false);
+              return;
+            }
+            cursor.continue();
+          } else {
+            if (!duplicate) {
+              store.add({ id, path });
+              resolve(true);
+            }
+          }
+        };
+      });
+    }
+
+    async function knightTour(x, y, movei, board, path) {
+      if (!running) return;
+      board[x][y] = movei;
+      path.push([x, y]);
+
+      if (movei === N * N - 1) {
+        const saved = await saveSolution([...path]);
+        if (saved) log(`Guardada: ${getName(path)}`);
+        board[x][y] = -1;
+        path.pop();
+        return;
+      }
+
+      for (const [dx, dy] of directions) {
+        const nx = x + dx, ny = y + dy;
+        if (isSafe(nx, ny, board)) {
+          await knightTour(nx, ny, movei + 1, board, path);
+        }
+      }
+
+      board[x][y] = -1;
+      path.pop();
+    }
+
+    async function startSearch() {
+      if (running) return;
+      running = true;
+      db = await openDB();
+      log("Iniciando búsqueda infinita...");
+      for (let x = 0; x < N; x++) {
+        for (let y = 0; y < N; y++) {
+          await knightTour(x, y, 0, createBoard(), []);
+        }
+      }
+      log("Búsqueda finalizada.");
+    }
+
+    function stopSearch() {
+      running = false;
+      log("Búsqueda detenida.");
+    }
+
+    function log(text) {
+      const logEl = document.getElementById("log");
+      logEl.textContent += text + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function exportSolutions() {
+      const tx = db.transaction("solutions", "readonly");
+      const store = tx.objectStore("solutions");
+      const all = store.getAll();
+      all.onsuccess = () => {
+        const blob = new Blob([JSON.stringify(all.result, null, 2)], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "knight_solutions.json";
+        a.click();
+      };
+    }
+  </script>
+</body>
+</html>
