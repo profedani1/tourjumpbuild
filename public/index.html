@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Knight's Tour - Búsqueda Continua Segura</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 1rem;
+      background: #f0f0f0;
+    }
+    button {
+      font-size: 1.1rem;
+      margin: 0.5rem 0.5rem 1rem 0;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+    }
+    #progressInfo {
+      white-space: pre-wrap;
+      background: #222;
+      color: #0f0;
+      padding: 1rem;
+      height: 300px;
+      overflow-y: auto;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Knight's Tour - Búsqueda Continua Segura</h1>
+  <p>Introduce tamaño del tablero (5 a 8) y ejecuta búsqueda sin límite.</p>
+
+  <button id="btnStart">🔁 Iniciar búsqueda sin fin (segura)</button>
+  <button id="btnStop" disabled>⏹️ Detener y exportar</button>
+  <button id="btnSend" disabled>📤 Enviar catálogo al servidor</button>
+
+  <pre id="progressInfo">Esperando inicio...</pre>
+
+  <script>
+    const knightMoves = [
+      [2,1], [1,2], [-1,2], [-2,1],
+      [-2,-1], [-1,-2], [1,-2], [2,-1]
+    ];
+
+    let safeRunning = false;
+    let safeCatalog = [];
+    let seenKeys = new Set();
+    let startX = 0, startY = 0;
+    let boardSize = 5;
+
+    const btnStart = document.getElementById("btnStart");
+    const btnStop = document.getElementById("btnStop");
+    const btnSend = document.getElementById("btnSend");
+    const progressInfo = document.getElementById("progressInfo");
+
+    btnStart.onclick = () => {
+      const sizeInput = prompt("Ingrese tamaño tablero (5 a 8):", "5");
+      const n = parseInt(sizeInput);
+      if (isNaN(n) || n < 5 || n > 8) {
+        alert("Tamaño inválido. Debe ser un número entre 5 y 8.");
+        return;
+      }
+      boardSize = n;
+      safeRunning = true;
+      safeCatalog = [];
+      seenKeys = new Set();
+      startX = 0;
+      startY = 0;
+      btnStart.disabled = true;
+      btnStop.disabled = false;
+      btnSend.disabled = true;
+      progressInfo.textContent = "🔄 Iniciando búsqueda...";
+      scheduleNextSearch();
+    };
+
+    btnStop.onclick = () => {
+      safeRunning = false;
+      btnStop.disabled = true;
+      btnStart.disabled = false;
+      btnSend.disabled = false;
+      progressInfo.textContent += "\n⏹️ Búsqueda detenida. Preparando exportación...";
+      exportCatalog();
+    };
+
+    btnSend.onclick = async () => {
+      btnSend.disabled = true;
+      progressInfo.textContent += "\n📤 Enviando catálogo al servidor...";
+      try {
+        const response = await fetch("/save-catalog", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ catalog: safeCatalog, boardSize })
+        });
+        const data = await response.json();
+        if (response.ok) {
+          progressInfo.textContent += `\n✅ Catálogo guardado en servidor como: ${data.filename}`;
+        } else {
+          progressInfo.textContent += `\n❌ Error guardando catálogo: ${data.error}`;
+        }
+      } catch (err) {
+        progressInfo.textContent += `\n❌ Error en comunicación con servidor: ${err}`;
+      }
+      btnSend.disabled = false;
+    };
+
+    function scheduleNextSearch() {
+      if (!safeRunning) return;
+      if (startY >= boardSize) {
+        progressInfo.textContent += "\n✅ Búsqueda completa.";
+        safeRunning = false;
+        btnStop.disabled = true;
+        btnStart.disabled = false;
+        btnSend.disabled = false;
+        exportCatalog();
+        return;
+      }
+
+      setTimeout(async () => {
+        await processSingleStart(startX, startY);
+        startX++;
+        if (startX >= boardSize) {
+          startX = 0;
+          startY++;
+        }
+        scheduleNextSearch();
+      }, 50);
+    }
+
+    async function processSingleStart(x, y) {
+      const board = Array.from({ length: boardSize }, () => Array(boardSize).fill(-1));
+      const path = [];
+      const res = await fullBacktrack(x, y, 0, path, board, boardSize);
+
+      if (res) {
+        const key = res.map(p => p.join(",")).join(";");
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          const name = `${res[0][0]}${res[0][1]}_${res[1][0]}${res[1][1]}_${res.at(-1)[0]}${res.at(-1)[1]}_${safeCatalog.length + 1}`;
+          safeCatalog.push({ name, path: res });
+        }
+
+        const derivadas = findDerivadas(res, boardSize);
+        for (const d of derivadas) {
+          const dKey = d.map(p => p.join(",")).join(";");
+          if (!seenKeys.has(dKey)) {
+            seenKeys.add(dKey);
+            const dName = `${d[0][0]}${d[0][1]}_${d[1][0]}${d[1][1]}_${d.at(-1)[0]}${d.at(-1)[1]}_${safeCatalog.length + 1}`;
+            safeCatalog.push({ name: dName, path: d });
+          }
+        }
+      }
+
+      progressInfo.textContent = `Procesando: (${x},${y}) → Catálogo: ${safeCatalog.length} recorridos únicos`;
+    }
+
+    async function fullBacktrack(x, y, moveNum, path, board, N) {
+      board[y][x] = moveNum;
+      path.push([x, y]);
+
+      if (moveNum === N * N - 1) return [...path];
+
+      for (let [dx, dy] of knightMoves) {
+        const nx = x + dx,
+          ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < N && ny < N && board[ny][nx] === -1) {
+          const res = await fullBacktrack(nx, ny, moveNum + 1, path, board, N);
+          if (res) return res;
+        }
+      }
+
+      board[y][x] = -1;
+      path.pop();
+      return null;
+    }
+
+    function findDerivadas(originalPath, N) {
+      const derivadas = [];
+      for (let i = originalPath.length - 2; i >= 5; i--) {
+        const partial = originalPath.slice(0, i);
+        const board = Array.from({ length: N }, () => Array(N).fill(-1));
+        let moveNum = 0;
+        for (const [x, y] of partial) board[y][x] = moveNum++;
+        const [lastX, lastY] = partial[partial.length - 1];
+        const path = [...partial];
+        const res = backtrackFrom(lastX, lastY, moveNum, board, path, N);
+        if (res && res.length === N * N) derivadas.push(res);
+      }
+      return derivadas;
+    }
+
+    function backtrackFrom(x, y, moveNum, board, path, N) {
+      if (moveNum === N * N) return [...path];
+      for (let [dx, dy] of knightMoves) {
+        const nx = x + dx,
+          ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < N && ny < N && board[ny][nx] === -1) {
+          board[ny][nx] = moveNum;
+          path.push([nx, ny]);
+          const res = backtrackFrom(nx, ny, moveNum + 1, board, path, N);
+          if (res) return res;
+          board[ny][nx] = -1;
+          path.pop();
+        }
+      }
+      return null;
+    }
+
+    function exportCatalog() {
+      const blob = new Blob([JSON.stringify(safeCatalog, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `catalogo_knight_${boardSize}x${boardSize}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      progressInfo.textContent += "\n📥 Catálogo descargado localmente.";
+    }
+  </script>
+
+</body>
+</html>
