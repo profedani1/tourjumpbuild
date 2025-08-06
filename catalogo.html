@@ -1,16 +1,134 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Catálogo Knight’s Tour</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Catálogo de Soluciones Knight’s Tour</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 1rem;
+    background: #f0f0f0;
+    color: #222;
+  }
+  h1 {
+    text-align: center;
+  }
+  .solution {
+    background: white;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.1);
+  }
+  .solution h2 {
+    margin-top: 0;
+    font-size: 1.2rem;
+  }
+  .steps {
+    font-family: monospace;
+    white-space: pre-wrap;
+    margin-left: 1rem;
+    max-height: 200px;
+    overflow-y: auto;
+    background: #eee;
+    padding: 0.5rem;
+    border-radius: 4px;
+  }
+  #status {
+    margin-bottom: 1rem;
+    font-weight: bold;
+    text-align: center;
+  }
+  button {
+    margin: 1rem auto;
+    display: block;
+    font-size: 1rem;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    border-radius: 5px;
+    border: 1px solid #333;
+    background: #fff;
+  }
+</style>
 </head>
 <body>
-  <h1>Catálogo de Soluciones</h1>
-<ul id="lista-soluciones"></ul>
-<button id="btn-descargar">Descargar Catálogo</button>
 
-  <script src="catalogo.js"></script>
+<h1>Catálogo de soluciones Knight’s Tour</h1>
+<div id="status">Cargando catálogo...</div>
+<div id="catalog"></div>
+
+<script>
+  // Abrir IndexedDB y obtener todas las soluciones
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open("KnightsTourDB", 1);
+      request.onerror = () => reject("No se pudo abrir IndexedDB.");
+      request.onsuccess = () => resolve(request.result);
+      request.onupgradeneeded = e => {
+        // Si no existe la base, crear el objectStore
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains("soluciones")) {
+          db.createObjectStore("soluciones", { keyPath: "name" });
+        }
+      };
+    });
+  }
+
+  async function loadCatalog() {
+    const status = document.getElementById("status");
+    const catalogDiv = document.getElementById("catalog");
+    catalogDiv.innerHTML = "";
+    status.textContent = "Abriendo base de datos...";
+    try {
+      const db = await openDB();
+      const tx = db.transaction("soluciones", "readonly");
+      const store = tx.objectStore("soluciones");
+      const getAllRequest = store.getAll();
+
+      getAllRequest.onerror = () => {
+        status.textContent = "Error al leer catálogo.";
+      };
+
+      getAllRequest.onsuccess = () => {
+        const results = getAllRequest.result;
+        if (!results.length) {
+          status.textContent = "No se encontraron soluciones almacenadas.";
+          return;
+        }
+        status.textContent = `Se encontraron ${results.length} soluciones.`;
+
+        // Mostrar cada solución
+        results.forEach(sol => {
+          const container = document.createElement("div");
+          container.className = "solution";
+
+          const title = document.createElement("h2");
+          title.textContent = `Solución: ${sol.name}`;
+          container.appendChild(title);
+
+          // Mostrar pasos
+          const stepsPre = document.createElement("pre");
+          stepsPre.className = "steps";
+
+          let textSteps = "";
+          sol.path.forEach((pos, idx) => {
+            textSteps += `Paso ${idx + 1}: (${pos[0]}, ${pos[1]})\n`;
+          });
+          stepsPre.textContent = textSteps;
+
+          container.appendChild(stepsPre);
+          catalogDiv.appendChild(container);
+        });
+      };
+    } catch (err) {
+      status.textContent = "Error: " + err;
+    }
+  }
+
+  // Carga catálogo cuando la página está lista
+  window.onload = loadCatalog;
+</script>
+
 </body>
 </html>
-
