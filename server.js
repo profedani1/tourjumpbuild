@@ -1,42 +1,32 @@
-const express = require('express');
+import express from "express";
+import fs from "fs";
+import path from "path";
+
 const app = express();
-const port = 3000;
+const PORT = process.env.PORT || 3000;
 
-// Middleware base
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static("public")); // sirve index.html y archivos estáticos en /public
 
-// === GESTIÓN DE PROCESOS ===
-let maxConcurrentTasks = 3;
-let currentTasks = 0;
-let taskQueue = [];
-
-// Función para manejar tareas encoladas
-function processQueue() {
-  if (taskQueue.length > 0 && currentTasks < maxConcurrentTasks) {
-    const { req, res, handler } = taskQueue.shift();
-    currentTasks++;
-    handler(req, res).finally(() => {
-      currentTasks--;
-      processQueue(); // Llamar al siguiente cuando este termine
-    });
+// Ruta para guardar catálogo enviado desde cliente
+app.post("/save-catalog", (req, res) => {
+  const { catalog, boardSize } = req.body;
+  if (!catalog || !boardSize) {
+    return res.status(400).json({ error: "Faltan datos catalog o boardSize" });
   }
-}
+  const filename = `catalogo_knight_${boardSize}x${boardSize}.json`;
+  const filepath = path.join(process.cwd(), filename);
 
-// Función para envolver cualquier endpoint "pesado"
-function controlledRoute(handler) {
-  return (req, res) => {
-    if (currentTasks < maxConcurrentTasks) {
-      currentTasks++;
-      handler(req, res).finally(() => {
-        currentTasks--;
-        processQueue();
-      });
-    } else {
-      // Encolar la solicitud
-      taskQueue.push({ req, res, handler });
-      // Se puede enviar una respuesta inicial si quieres
-      console.log("Tarea en cola. Esperando turno...");
+  fs.writeFile(filepath, JSON.stringify(catalog, null, 2), (err) => {
+    if (err) {
+      console.error("Error guardando archivo:", err);
+      return res.status(500).json({ error: "Error guardando archivo" });
     }
-  };
-}
+    console.log(`Archivo guardado: ${filename}`);
+    res.json({ message: "Archivo guardado con éxito", filename });
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`Servidor corriendo en http://localhost:${PORT}`);
+});
