@@ -1,0 +1,21 @@
+body {
+  font-family: sans-serif;
+  background: #f4f4f4;
+  padding: 1rem;
+}
+
+button {
+  margin: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+pre {
+  background: #222;
+  color: #0f0;
+  padding: 1rem;
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow-y: auto;
+}
