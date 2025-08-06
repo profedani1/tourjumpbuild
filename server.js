@@ -1,14 +1,29 @@
-const express = require('express');
-const path = require('path');
+import express from "express";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = 3000;
 
-app.use(express.static(path.join(__dirname, 'public')));
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/index.html'));
+app.use(express.static(path.join(__dirname, "public")));
+app.use(express.json({ limit: "10mb" }));
+
+app.post("/save", (req, res) => {
+  const data = req.body;
+  fs.writeFile("productCatalog.json", JSON.stringify(data, null, 2), err => {
+    if (err) {
+      console.error("❌ Error al guardar JSON:", err);
+      res.status(500).send("Error al guardar el archivo.");
+    } else {
+      console.log("✅ Catálogo guardado correctamente.");
+      res.send("Catálogo guardado.");
+    }
+  });
 });
 
-app.listen(port, () => {
-  console.log(`Servidor escuchando en http://localhost:${port}`);
+app.listen(PORT, () => {
+  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
 });
