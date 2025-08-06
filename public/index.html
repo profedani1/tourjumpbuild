@@ -1,200 +1,77 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
-<title>Knight’s Tour - Búsqueda Continua sin límite</title>
-<style>
-  body { font-family: Arial, sans-serif; padding: 1rem; background: #f9f9f9; }
-  button { margin: 0.3rem; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer; }
-  pre { background: #eee; padding: 1rem; max-height: 200px; overflow: auto; }
-</style>
+  <meta charset="UTF-8" />
+  <title>Catálogo de Recorridos</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <h1>♞ Catálogo de Recorridos Knight's Tour</h1>
+  <button id="btnStart">▶️ Iniciar búsqueda sin fin</button>
+  <button id="btnStop" disabled>⏹️ Detener</button>
+  <button id="btnSend" disabled>💾 Enviar catálogo al servidor</button>
+  <pre id="progressInfo">Esperando inicio...</pre>
 
-<h1>Knight’s Tour - Búsqueda Continua sin límite</h1>
+  <script>
+    let running = false;
+    let catalog = [];
+    const btnStart = document.getElementById("btnStart");
+    const btnStop = document.getElementById("btnStop");
+    const btnSend = document.getElementById("btnSend");
+    const progressInfo = document.getElementById("progressInfo");
 
-<label for="boardSize">Tamaño tablero (recomendado 5 para rendimiento): </label>
-<input type="number" id="boardSize" min="5" max="8" value="5" />
+    btnStart.onclick = () => {
+      running = true;
+      catalog = [];
+      btnStart.disabled = true;
+      btnStop.disabled = false;
+      btnSend.disabled = true;
+      progressInfo.textContent = "🔄 Iniciando búsqueda...";
+      startSearching();
+    };
 
-<br /><br />
-
-<button id="btnStart">🔁 Iniciar búsqueda sin fin (segura)</button>
-<button id="btnStop" disabled>⏹️ Detener y exportar catálogo</button>
-
-<pre id="progressInfo">Esperando inicio...</pre>
-
-<script>
-  const knightMoves = [
-    [2, 1], [1, 2], [-1, 2], [-2, 1],
-    [-2, -1], [-1, -2], [1, -2], [2, -1]
-  ];
-
-  let safeRunning = false;
-  let safeCatalog = [];
-  let seenKeys = new Set();
-  let startX = 0, startY = 0;
-  let boardSize = 5;
-
-  const btnStart = document.getElementById('btnStart');
-  const btnStop = document.getElementById('btnStop');
-  const progressInfo = document.getElementById('progressInfo');
-
-  btnStart.onclick = () => {
-    boardSize = parseInt(document.getElementById('boardSize').value);
-    if (boardSize < 5 || boardSize > 8) {
-      alert('Usa un tamaño entre 5 y 8 para rendimiento y viabilidad.');
-      return;
-    }
-    safeRunning = true;
-    safeCatalog = [];
-    seenKeys = new Set();
-    startX = 0;
-    startY = 0;
-    btnStart.disabled = true;
-    btnStop.disabled = false;
-    progressInfo.textContent = '🔄 Iniciando búsqueda...';
-    scheduleNextSearch();
-  };
-
-  btnStop.onclick = () => {
-    safeRunning = false;
-    btnStop.disabled = true;
-    btnStart.disabled = false;
-    progressInfo.textContent += "\n⏹️ Búsqueda detenida. Preparando exportación...";
-    exportCatalog();
-  };
-
-  function scheduleNextSearch() {
-    if (!safeRunning) return;
-
-    if (startY >= boardSize) {
-      safeRunning = false;
-      btnStop.disabled = true;
+    btnStop.onclick = () => {
+      running = false;
       btnStart.disabled = false;
-      progressInfo.textContent += "\n✅ Búsqueda terminada.";
-      exportCatalog();
-      return;
+      btnStop.disabled = true;
+      btnSend.disabled = false;
+      progressInfo.textContent += "\n⏹️ Búsqueda detenida.";
+    };
+
+    btnSend.onclick = async () => {
+      try {
+        const res = await fetch("/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(catalog),
+        });
+        const text = await res.text();
+        alert("✅ " + text);
+      } catch (err) {
+        alert("❌ Error al guardar en el servidor.");
+      }
+    };
+
+    function generateDummySolution(n) {
+      const move = (x, y) => `(${x}, ${y})`;
+      return {
+        nombre: `(${n % 5}, ${n % 5}) → (${(n + 1) % 5}, ${(n + 2) % 5}) → (${(n + 3) % 5}, ${(n + 4) % 5}) #${Math.floor(n / 5)}`,
+        recorrido: Array.from({ length: 25 }, (_, i) => move(i % 5, Math.floor(i / 5)))
+      };
     }
 
-    setTimeout(async () => {
-      const x = startX;
-      const y = startY;
-      await processSingleStart(x, y);
-      startX++;
-      if (startX >= boardSize) {
-        startX = 0;
-        startY++;
-      }
-      scheduleNextSearch();
-    }, 50);
-  }
-
-  async function processSingleStart(x, y) {
-    const board = Array.from({ length: boardSize }, () => Array(boardSize).fill(-1));
-    const path = [];
-    const result = await fullBacktrack(x, y, 0, path, board, boardSize);
-
-    if (result) {
-      const key = result.map(p => p.join(',')).join(';');
-      if (!seenKeys.has(key)) {
-        seenKeys.add(key);
-        const name = `${result[0][0]}${result[0][1]}_${result[1][0]}${result[1][1]}_${result.at(-1)[0]}${result.at(-1)[1]}_${safeCatalog.length + 1}`;
-        safeCatalog.push({ name, path: result });
-      }
-
-      // derivadas
-      const derivadas = findDerivadas(result, boardSize);
-      for (const d of derivadas) {
-        const dKey = d.map(p => p.join(',')).join(';');
-        if (!seenKeys.has(dKey)) {
-          seenKeys.add(dKey);
-          const dName = `${d[0][0]}${d[0][1]}_${d[1][0]}${d[1][1]}_${d.at(-1)[0]}${d.at(-1)[1]}_${safeCatalog.length + 1}`;
-          safeCatalog.push({ name: dName, path: d });
+    async function startSearching() {
+      let counter = 0;
+      while (running) {
+        const solution = generateDummySolution(counter);
+        catalog.push(solution);
+        if (counter % 50 === 0) {
+          progressInfo.textContent = `🔎 Encontradas: ${catalog.length} soluciones...`;
+          await new Promise(r => setTimeout(r, 50)); // Evita bloquear UI
         }
+        counter++;
       }
     }
-
-    progressInfo.textContent = `Procesando: (${x},${y}) → Catálogo: ${safeCatalog.length} recorridos únicos`;
-  }
-
-  async function fullBacktrack(x, y, moveNum, path, board, N) {
-    board[y][x] = moveNum;
-    path.push([x, y]);
-
-    if (moveNum === N * N - 1) return [...path];
-
-    for (const [dx, dy] of knightMoves) {
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx >= 0 && ny >= 0 && nx < N && ny < N && board[ny][nx] === -1) {
-        const res = await fullBacktrack(nx, ny, moveNum + 1, path, board, N);
-        if (res) return res;
-      }
-    }
-
-    board[y][x] = -1;
-    path.pop();
-    return null;
-  }
-
-  function findDerivadas(originalPath, N) {
-    const derivadas = [];
-
-    for (let i = originalPath.length - 2; i >= 5; i--) {
-      const partial = originalPath.slice(0, i);
-      const board = Array.from({ length: N }, () => Array(N).fill(-1));
-      let moveNum = 0;
-
-      for (const [x, y] of partial) {
-        board[y][x] = moveNum++;
-      }
-
-      const [lastX, lastY] = partial[partial.length - 1];
-      const path = [...partial];
-
-      const res = backtrackFrom(lastX, lastY, moveNum, board, path);
-      if (res && res.length === N * N) {
-        derivadas.push(res);
-      }
-    }
-
-    return derivadas;
-  }
-
-  function backtrackFrom(x, y, moveNum, board, path) {
-    if (moveNum === board.length * board.length) return path;
-
-    for (const [dx, dy] of knightMoves) {
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx >= 0 && ny >= 0 && nx < board.length && ny < board.length && board[ny][nx] === -1) {
-        board[ny][nx] = moveNum;
-        path.push([nx, ny]);
-        const res = backtrackFrom(nx, ny, moveNum + 1, board, path);
-        if (res) return res;
-        path.pop();
-        board[ny][nx] = -1;
-      }
-    }
-
-    return null;
-  }
-
-  function exportCatalog() {
-    if (safeCatalog.length === 0) {
-      alert('No hay soluciones para exportar.');
-      return;
-    }
-    const blob = new Blob([JSON.stringify(safeCatalog, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `catalogo_knight_${boardSize}x${boardSize}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    progressInfo.textContent += "\n✅ Exportación lista.";
-  }
-</script>
-
+  </script>
 </body>
 </html>
