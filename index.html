@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Catálogo de Knight’s Tours</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    button { margin: 5px; padding: 10px; font-size: 14px; }
+    #progressInfo { margin-top: 10px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Catálogo de Knight’s Tours</h1>
+  <label for="boardSize">Tamaño del tablero:</label>
+  <input type="number" id="boardSize" value="5" min="5" max="8" />
+
+  <div>
+    <button onclick="startSafeContinuousSearch()">🔁 Iniciar búsqueda sin fin (segura)</button>
+    <button onclick="stopSafeContinuousSearch()">⏹️ Detener y exportar</button>
+  </div>
+
+  <pre id="progressInfo">Esperando inicio...</pre>
+
+  <script>
+    const knightMoves = [
+      [2, 1], [1, 2], [-1, 2], [-2, 1],
+      [-2, -1], [-1, -2], [1, -2], [2, -1]
+    ];
+
+    let safeRunning = false;
+    let safeCatalog = [];
+    let seenKeys = new Set();
+    let startX = 0, startY = 0;
+    let boardSize = 5;
+
+    function startSafeContinuousSearch() {
+      safeRunning = true;
+      safeCatalog = [];
+      seenKeys = new Set();
+      startX = 0;
+      startY = 0;
+      boardSize = parseInt(document.getElementById('boardSize').value);
+      document.getElementById('progressInfo').textContent = '🔄 Iniciando búsqueda...';
+      scheduleNextSearch();
+    }
+
+    function stopSafeContinuousSearch() {
+      safeRunning = false;
+      document.getElementById('progressInfo').textContent = '⏹️ Búsqueda detenida. Exportando...';
+
+      const blob = new Blob([JSON.stringify(safeCatalog, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `catalogo_knight_${boardSize}x${boardSize}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function scheduleNextSearch() {
+      if (!safeRunning) return;
+
+      if (startY >= boardSize) {
+        stopSafeContinuousSearch();
+        return;
+      }
+
+      setTimeout(() => {
+        const x = startX;
+        const y = startY;
+
+        processSingleStart(x, y).then(() => {
+          startX++;
+          if (startX >= boardSize) {
+            startX = 0;
+            startY++;
+          }
+          scheduleNextSearch();
+        });
+      }, 50); // respiración entre pasos
+    }
+
+    async function processSingleStart(x, y) {
+      const board = Array.from({ length: boardSize }, () => Array(boardSize).fill(-1));
+      const path = [];
+      const result = await fullBacktrack(x, y, 0, path, board, boardSize);
+
+      if (result) {
+        const key = result.map(p => p.join(',')).join(';');
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          const name = `${result[0][0]}${result[0][1]}_${result[1][0]}${result[1][1]}_${result.at(-1)[0]}${result.at(-1)[1]}_${safeCatalog.length + 1}`;
+          safeCatalog.push({ name, path: result });
+        }
+
+        const derivadas = findDerivadas(result, boardSize);
+        for (const d of derivadas) {
+          const dKey = d.map(p => p.join(',')).join(';');
+          if (!seenKeys.has(dKey)) {
+            seenKeys.add(dKey);
+            const dName = `${d[0][0]}${d[0][1]}_${d[1][0]}${d[1][1]}_${d.at(-1)[0]}${d.at(-1)[1]}_${safeCatalog.length + 1}`;
+            safeCatalog.push({ name: dName, path: d });
+          }
+        }
+      }
+
+      document.getElementById('progressInfo').textContent =
+        `Procesando: (${x},${y}) → Catálogo: ${safeCatalog.length} recorridos únicos`;
+    }
+
+    async function fullBacktrack(x, y, moveNum, path, board, N) {
+      board[y][x] = moveNum;
+      path.push([x, y]);
+
+      if (moveNum === N * N - 1) return [...path];
+
+      for (let [dx, dy] of knightMoves) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < N && ny < N && board[ny][nx] === -1) {
+          const res = await fullBacktrack(nx, ny, moveNum + 1, path, board, N);
+          if (res) return res;
+        }
+      }
+
+      board[y][x] = -1;
+      path.pop();
+      return null;
+    }
+
+    function findDerivadas(originalPath, N) {
+      const derivadas = [];
+
+      for (let i = originalPath.length - 2; i >= 5; i--) {
+        const partial = originalPath.slice(0, i);
+        const board = Array.from({ length: N }, () => Array(N).fill(-1));
+        let moveNum = 0;
+
+        for (const [x, y] of partial) {
+          board[y][x] = moveNum++;
+        }
+
+        const [lastX, lastY] = partial[partial.length - 1];
+        const path = [...partial];
+
+        const res = backtrackFrom(lastX, lastY, moveNum, board, path, N);
+        if (res && res.length === N * N) {
+          derivadas.push(res);
+        }
+      }
+
+      return derivadas;
+    }
+
+    function backtrackFrom(x, y, moveNum, board, path, N) {
+      if (moveNum === N * N) return [...path];
+
+      for (let [dx, dy] of knightMoves) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < N && ny < N && board[ny][nx] === -1) {
+          board[ny][nx] = moveNum;
+          path.push([nx, ny]);
+          const res = backtrackFrom(nx, ny, moveNum + 1, board, path, N);
+          if (res) return res;
+          board[ny][nx] = -1;
+          path.pop();
+        }
+      }
+
+      return null;
+    }
+  </script>
+</body>
+</html>
