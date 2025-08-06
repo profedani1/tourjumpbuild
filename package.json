@@ -1,0 +1,14 @@
+{
+  "name": "knights-tour",
+  "version": "1.0.0",
+  "description": "Búsqueda continua Knight’s Tour con derivadas y exportación JSON",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "Tu Nombre",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
